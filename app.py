@@ -145,31 +145,37 @@ def canonical_key_from_cards(cards):
     スート名の違いを無視して、同じ構成のハンドを同じキーにする。
 
     例:
-    AsAcKsKc と AhAcKhKc はどちらも同じ canonical_key になる。
+    AsAcKsKc と AhAcKhKc は同じ canonical_key になる。
 
-    考え方:
-    1. ランクの高い順にカードを並べる
-    2. 出てきたスートに順番に a,b,c,d を割り当てる
-    3. ランク + 正規化スートで表現する
+    強化版:
+    実スート c/d/h/s を a/b/c/d に置き換える全パターンを試し、
+    その中で一番小さい表現を採用する。
+    これにより、ペアや同ランクがあるハンドでも安定して同型判定できる。
     """
-    sorted_cards = sorted(
-        cards,
-        key=lambda c: (-RANK_VALUE[c[0]], c[1])
-    )
+    from itertools import permutations
 
-    suit_map = {}
-    next_label_ord = ord("a")
-    parts = []
+    if not cards:
+        return ""
 
-    for c in sorted_cards:
-        rank = c[0]
-        suit = c[1]
-        if suit not in suit_map:
-            suit_map[suit] = chr(next_label_ord)
-            next_label_ord += 1
-        parts.append(rank + suit_map[suit])
+    labels = "abcd"
+    possible_keys = []
 
-    return "".join(parts)
+    for perm in permutations(labels, 4):
+        suit_map = dict(zip(SUITS, perm))
+        converted = []
+        for card in cards:
+            rank = card[0]
+            suit = card[1]
+            converted.append(rank + suit_map[suit])
+
+        # ランク降順、同ランクなら正規化スート順に並べる
+        converted = sorted(
+            converted,
+            key=lambda c: (-RANK_VALUE[c[0]], c[1])
+        )
+        possible_keys.append("".join(converted))
+
+    return min(possible_keys)
 
 
 def canonical_key(hand: str):
@@ -177,6 +183,41 @@ def canonical_key(hand: str):
     if not cards:
         return ""
     return canonical_key_from_cards(cards)
+
+
+def normalize_hand_order(cards):
+    """表示用にランク降順、同ランクはスート順で並べる"""
+    ordered = sorted(cards, key=lambda c: (-RANK_VALUE[c[0]], c[1]))
+    return "".join(ordered)
+
+
+def generate_equivalent_hands(hand: str):
+    """
+    入力ハンドとスート構造が同じハンドをすべて生成する。
+
+    例:
+    AsAcKsKc を登録したら、AhAcKhKc なども自動で登録対象にする。
+
+    注意:
+    これはランク構造とスート接続構造を保ったまま、c/d/h/sを入れ替えたもの。
+    """
+    from itertools import permutations
+
+    cards = parse_hand(hand)
+    if not cards:
+        return []
+
+    generated = set()
+    for perm in permutations(SUITS, 4):
+        suit_map = dict(zip(SUITS, perm))
+        new_cards = []
+        for card in cards:
+            rank = card[0]
+            suit = card[1]
+            new_cards.append(rank + suit_map[suit])
+        generated.add(normalize_hand_order(new_cards))
+
+    return sorted(generated, key=lambda h: (canonical_key(h), h))
 
 
 def feature_row(hand: str):
@@ -404,9 +445,14 @@ with st.form("add_ev_form"):
                     and canonical_key(str(r.get("hand", ""))) == canonical_key(hand_input)
                 )
             ]
-            rows.append({"position": pos_input, "hand": hand_input.strip(), "ev": ev_input})
+            equivalent_hands = generate_equivalent_hands(hand_input)
+            for h in equivalent_hands:
+                rows.append({"position": pos_input, "hand": h, "ev": ev_input})
             st.session_state.manual_rows = rows
-            st.success(f"登録しました: {pos_input} {hand_input.strip()} = {ev_input:.4f}")
+            st.success(
+                f"登録しました: {pos_input} {hand_input.strip()} = {ev_input:.4f} / "
+                f"同型ハンド {len(equivalent_hands)}件を自動追加"
+            )
 
 learned_raw = pd.DataFrame(st.session_state.manual_rows)
 
@@ -416,7 +462,7 @@ if len(learned_raw) == 0:
     st.stop()
 
 learned = enrich(learned_raw)
-learned = learned.sort_values(["position", "hand"]).drop_duplicates(subset=["position", "canonical_key"], keep="last")
+learned = learned.sort_values(["position", "hand"]).drop_duplicates(subset=["position", "hand"], keep="last")
 current = learned[learned["position"] == selected_position].copy()
 
 st.divider()
