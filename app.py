@@ -565,8 +565,7 @@ AdAcQdQc,4.41""",
             st.success(f"一括登録しました: {added_count}件")
         if error_lines:
             st.warning("一部登録できない行がありました。")
-            st.code("
-".join(error_lines), language="text")
+            st.code("\n".join(error_lines), language="text")
 
 st.subheader("選択中ポジションへ連続登録")
 st.caption("GTO Wizardで現在見ているポジションに合わせて、hand と ev を連続で登録します。登録先は左側の『表示・予測するポジション』です。")
