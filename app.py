@@ -18,6 +18,7 @@ RANKS = "23456789TJQKA"
 RANK_VALUE = {r: i for i, r in enumerate(RANKS, start=2)}
 SUITS = "cdhs"
 POSITIONS = ["UTG", "HJ", "CO", "BTN", "SB"]
+TOTAL_PLO4_COMBOS = 270725
 DEFAULT_OPEN_PCT = {
     "UTG": 18.1,
     "HJ": 24.0,
@@ -464,8 +465,24 @@ col4.metric(f"{selected_position} 平均EV", f"{current['ev'].mean():.4f}" if le
 col5.metric(f"{selected_position} 最高EV", f"{current['ev'].max():.4f}" if len(current) else "-")
 
 st.subheader("ポジション別 登録数")
-pos_summary = learned.groupby("position").agg(count=("hand", "count"), avg_ev=("ev", "mean"), max_ev=("ev", "max")).reset_index()
-st.dataframe(pos_summary, use_container_width=True)
+pos_summary = learned.groupby("position").agg(
+    count=("hand", "count"),
+    avg_ev=("ev", "mean"),
+    max_ev=("ev", "max"),
+).reset_index()
+pos_summary["total_pct"] = pos_summary["count"] / TOTAL_PLO4_COMBOS * 100
+pos_summary = pos_summary[["position", "count", "total_pct", "avg_ev", "max_ev"]]
+st.dataframe(
+    pos_summary,
+    use_container_width=True,
+    column_config={
+        "position": "position",
+        "count": "登録数",
+        "total_pct": st.column_config.NumberColumn("全体%", format="%.4f%%"),
+        "avg_ev": st.column_config.NumberColumn("平均EV", format="%.4f"),
+        "max_ev": st.column_config.NumberColumn("最高EV", format="%.4f"),
+    },
+)
 
 # 予測
 st.subheader("未入力ハンドのEVを近似")
