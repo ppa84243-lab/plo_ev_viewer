@@ -14,17 +14,32 @@ from math import sqrt
 # streamlit
 # pandas
 
-RANKS = "23456789TJQKA"
-RANK_VALUE = {r: i for i, r in enumerate(RANKS, start=2)}
+# 表示・ソート順は A K Q J T 9 8 7 6 5 4 3 2
+RANKS = "AKQJT98765432"
+RANK_VALUE = {
+    "A": 14,
+    "K": 13,
+    "Q": 12,
+    "J": 11,
+    "T": 10,
+    "9": 9,
+    "8": 8,
+    "7": 7,
+    "6": 6,
+    "5": 5,
+    "4": 4,
+    "3": 3,
+    "2": 2,
+}
 SUITS = "cdhs"
 POSITIONS = ["UTG", "HJ", "CO", "BTN", "SB"]
 TOTAL_PLO4_COMBOS = 270725
 DEFAULT_OPEN_PCT = {
     "UTG": 18.1,
-    "HJ": 24.0,
-    "CO": 36.0,
-    "BTN": 60.0,
-    "SB": 45.0,
+    "HJ": 22.9,
+    "CO": 30.9,
+    "BTN": 47.6,
+    "SB": 30.3,
 }
 
 
