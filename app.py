@@ -359,24 +359,13 @@ def predict_ev(target_hand: str, learned: pd.DataFrame, position: str, k: int = 
     return float(pred), nearest, "predicted"
 
 
-def assign_open_by_ev(df: pd.DataFrame, target_pct: float, position: str) -> pd.DataFrame:
+def assign_open_by_positive_ev(df: pd.DataFrame, position: str) -> pd.DataFrame:
+    """
+    指定ポジションのEVがプラスならopen扱いにする。
+    EV <= 0 はfold扱い。
+    """
     df = df[df["position"] == position].copy()
-    total = len(df)
-    target_n = round(total * target_pct / 100)
-
-    df["open_auto"] = 0
-
-    # ここは今までの思想を残している。AAxxはAAAA以外open固定。
-    # ポジション別に厳密化するなら、後でpositionごとにルールを分ける。
-    df.loc[df["is_aaxx"] == 1, "open_auto"] = 1
-    df.loc[df["is_aaaa"] == 1, "open_auto"] = 0
-
-    forced_open_n = int(df["open_auto"].sum())
-    remaining_n = max(target_n - forced_open_n, 0)
-
-    candidates = df[(df["open_auto"] == 0) & (df["is_aaaa"] == 0) & (df["ev"].notna())]
-    selected_idx = candidates.sort_values("ev", ascending=False).head(remaining_n).index
-    df.loc[selected_idx, "open_auto"] = 1
+    df["open_auto"] = (df["ev"] > 0).astype(int)
     return df
 
 
@@ -557,13 +546,12 @@ if len(view) > 0:
 else:
     st.info(f"{selected_position} の登録データがありません。")
 
-# open判定
-st.subheader(f"EV順で{selected_position} open判定")
-default_pct = DEFAULT_OPEN_PCT.get(selected_position, 18.1)
-target_pct = st.number_input("open %", min_value=0.0, max_value=100.0, value=float(default_pct), step=0.1)
+# EVプラス判定
+st.subheader(f"{selected_position} EVプラス判定")
 
 if len(current) > 0:
-    range_df = assign_open_by_ev(learned, target_pct, selected_position)
+    range_df = assign_open_by_positive_ev(learned, selected_position)
+    st.caption("EVがプラスなら open_auto = 1、EVが0以下なら open_auto = 0 としています。")
     st.dataframe(
         range_df.sort_values("ev", ascending=False)[["position", "hand", "ev", "open_auto", "category", "side_cards", "suit_pattern", "ace_suited_count"]],
         use_container_width=True,
@@ -571,7 +559,7 @@ if len(current) > 0:
     )
 else:
     range_df = pd.DataFrame()
-    st.info("このポジションのデータがないため、open判定はできません。")
+    st.info("このポジションのデータがないため、EVプラス判定はできません。")
 
 # カテゴリ集計
 st.subheader(f"カテゴリ集計: {selected_position}")
