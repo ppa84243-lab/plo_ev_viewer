@@ -490,14 +490,14 @@ st.caption("複数行を貼り付けて一括登録できます。形式は `pos
 with st.form("bulk_add_ev_form"):
     bulk_text = st.text_area(
         "一括入力",
-        placeholder="例:
+        placeholder="""例:
 UTG,AdAcTdTc,4.33
 UTG,AdAcQdQc,4.41
 HJ,AsAcKsKc,4.80
 
 または
 AdAcTdTc,4.33
-AdAcQdQc,4.41",
+AdAcQdQc,4.41""",
         height=180,
     )
     bulk_submitted = st.form_submit_button("まとめて登録")
