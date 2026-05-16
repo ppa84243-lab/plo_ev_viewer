@@ -433,7 +433,7 @@ with st.form("add_ev_form"):
     c0, c1, c2, c3 = st.columns([1, 2, 1, 1])
     pos_input = c0.selectbox("position", POSITIONS, index=POSITIONS.index(selected_position))
     hand_input = c1.text_input("hand", placeholder="例: AdAc8h3h")
-    ev_input = c2.number_input("ev", value=0.0, step=0.01, format="%.4f")
+    ev_input = c2.number_input("ev", value=0.00, step=0.01, format="%.2f")
     submitted = c3.form_submit_button("登録")
 
     if submitted:
@@ -455,7 +455,7 @@ with st.form("add_ev_form"):
                 rows.append({"position": pos_input, "hand": h, "ev": ev_input})
             st.session_state.manual_rows = rows
             st.success(
-                f"登録しました: {pos_input} {hand_input.strip()} = {ev_input:.4f} / "
+                f"登録しました: {pos_input} {hand_input.strip()} = {ev_input:.2f} / "
                 f"同型ハンド {len(equivalent_hands)}件を自動追加"
             )
 
@@ -476,8 +476,8 @@ col1, col2, col3, col4, col5 = st.columns(5)
 col1.metric("総登録数", f"{len(learned):,}")
 col2.metric(f"{selected_position}登録数", f"{len(current):,}")
 col3.metric(f"{selected_position} AAxx数", f"{int(current['is_aaxx'].sum()) if len(current) else 0:,}")
-col4.metric(f"{selected_position} 平均EV", f"{current['ev'].mean():.4f}" if len(current) else "-")
-col5.metric(f"{selected_position} 最高EV", f"{current['ev'].max():.4f}" if len(current) else "-")
+col4.metric(f"{selected_position} 平均EV", f"{current['ev'].mean():.2f}" if len(current) else "-")
+col5.metric(f"{selected_position} 最高EV", f"{current['ev'].max():.2f}" if len(current) else "-")
 
 st.subheader("ポジション別 登録数")
 pos_summary = learned.groupby("position").agg(
@@ -494,8 +494,8 @@ st.dataframe(
         "position": "position",
         "count": "登録数",
         "total_pct": st.column_config.NumberColumn("全体%", format="%.4f%%"),
-        "avg_ev": st.column_config.NumberColumn("平均EV", format="%.4f"),
-        "max_ev": st.column_config.NumberColumn("最高EV", format="%.4f"),
+        "avg_ev": st.column_config.NumberColumn("平均EV", format="%.2f"),
+        "max_ev": st.column_config.NumberColumn("最高EV", format="%.2f"),
     },
 )
 
@@ -544,7 +544,7 @@ if lookup_hand:
             column_config={
                 "position": "position",
                 "registered_hand": "登録ハンド",
-                "ev": st.column_config.NumberColumn("EV", format="%.4f"),
+                "ev": st.column_config.NumberColumn("EV", format="%.2f"),
                 "R/F": "R/F",
                 "status": "状態",
             },
@@ -565,7 +565,7 @@ if predict_hand:
         st.warning(f"{predict_position} の登録データがまだありません。このポジションのEVを先に登録してください。")
     elif pred is not None:
         label = "登録済みEV" if status == "exact" else "推定EV"
-        st.metric(f"{predict_position} {label}", f"{pred:.4f}")
+        st.metric(f"{predict_position} {label}", f"{pred:.2f}")
         st.caption("同じポジション内の近いハンドを加重平均して推定しています。")
         st.dataframe(
             nearest[["position", "hand", "ev", "distance", "category", "side_cards", "suit_pattern", "ace_suited_count", "connectedness"]],
