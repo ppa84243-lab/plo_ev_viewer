@@ -499,6 +499,56 @@ st.dataframe(
     },
 )
 
+# ハンド別・ポジション別EV確認
+st.subheader("ハンド別 ポジションEV / R・F")
+st.caption("ハンドを入力すると、各ポジションの登録済みEVと、EVがプラスならR、0以下ならFを表示します。スート違いの同型ハンドも同じものとして検索します。")
+
+lookup_hand = st.text_input("確認したいhand", placeholder="例: AsAcKsKc", key="lookup_hand_by_position")
+
+if lookup_hand:
+    lookup_key = canonical_key(lookup_hand)
+    if lookup_key == "":
+        st.warning("ハンド形式が不正です。例: AsAcKsKc")
+    else:
+        rows = []
+        for pos in POSITIONS:
+            pos_data = learned[
+                (learned["position"] == pos)
+                & (learned["canonical_key"] == lookup_key)
+            ].copy()
+
+            if len(pos_data) > 0:
+                hit = pos_data.sort_values("ev", ascending=False).iloc[0]
+                ev = float(hit["ev"])
+                action = "R" if ev > 0 else "F"
+                rows.append({
+                    "position": pos,
+                    "registered_hand": hit["hand"],
+                    "ev": ev,
+                    "R/F": action,
+                    "status": "registered",
+                })
+            else:
+                rows.append({
+                    "position": pos,
+                    "registered_hand": "",
+                    "ev": None,
+                    "R/F": "-",
+                    "status": "not registered",
+                })
+
+        lookup_df = pd.DataFrame(rows)
+        st.dataframe(
+            lookup_df,
+            use_container_width=True,
+            column_config={
+                "position": "position",
+                "registered_hand": "登録ハンド",
+                "ev": st.column_config.NumberColumn("EV", format="%.4f"),
+                "R/F": "R/F",
+                "status": "状態",
+            },
+        )
 # 予測
 st.subheader("未入力ハンドのEVを近似")
 p1, p2, p3 = st.columns([1, 2, 1])
