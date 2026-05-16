@@ -156,6 +156,31 @@ def high_card_score(cards):
     return sum(RANK_VALUE[c[0]] for c in cards)
 
 
+def rank_string_sort_value(rank_string: str):
+    """
+    AKQJT98765432順で文字列ランクを数値化する。
+    例: QQ > TT になるようにする。
+    """
+    if not rank_string:
+        return 0
+    value = 0
+    for r in rank_string:
+        value = value * 15 + RANK_VALUE.get(r, 0)
+    return value
+
+
+def hand_sort_value(cards):
+    """
+    ハンド全体を A K Q J T 9 ... 2 の順でソートするための数値。
+    例: AAQQ > AATT になる。
+    """
+    vals = sorted([RANK_VALUE[c[0]] for c in cards], reverse=True)
+    value = 0
+    for v in vals:
+        value = value * 15 + v
+    return value
+
+
 def canonical_key_from_cards(cards):
     """
     スート名の違いを無視して、同じ構成のハンドを同じキーにする。
@@ -255,6 +280,8 @@ def feature_row(hand: str):
         "is_aaxx": int(is_aaxx(cards)),
         "is_aaaa": int(is_aaaa(cards)),
         "side_cards": side_cards_for_aa(cards) if is_aaxx(cards) else "",
+        "side_cards_sort": rank_string_sort_value(side_cards_for_aa(cards)) if is_aaxx(cards) else 0,
+        "hand_sort": hand_sort_value(cards),
         "suit_pattern": sp,
         "ace_suited_count": ace_suited_count(cards),
         "pair_count": pair_count(cards),
@@ -620,7 +647,11 @@ if search:
     ]
 
 if len(view) > 0:
-    view = view.sort_values("ev", ascending=False, na_position="last")
+    view = view.sort_values(
+    ["ev", "side_cards_sort", "hand_sort", "hand"],
+    ascending=[False, False, False, True],
+    na_position="last",
+)
     st.dataframe(
         view[["position", "hand", "ev", "category", "side_cards", "suit_pattern", "ace_suited_count", "pair_count", "connectedness"]],
         use_container_width=True,
