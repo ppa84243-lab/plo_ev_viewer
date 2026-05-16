@@ -36,10 +36,10 @@ POSITIONS = ["UTG", "HJ", "CO", "BTN", "SB"]
 TOTAL_PLO4_COMBOS = 270725
 DEFAULT_OPEN_PCT = {
     "UTG": 18.1,
-    "HJ": 22.9,
-    "CO": 30.9,
-    "BTN": 47.6,
-    "SB": 30.3,
+    "HJ": 24.0,
+    "CO": 36.0,
+    "BTN": 60.0,
+    "SB": 45.0,
 }
 
 
@@ -549,6 +549,7 @@ if lookup_hand:
                 "status": "状態",
             },
         )
+
 # 予測
 st.subheader("未入力ハンドのEVを近似")
 p1, p2, p3 = st.columns([1, 2, 1])
@@ -628,20 +629,9 @@ if len(view) > 0:
 else:
     st.info(f"{selected_position} の登録データがありません。")
 
-# EVプラス判定
-st.subheader(f"{selected_position} EVプラス判定")
-
-if len(current) > 0:
-    range_df = assign_open_by_positive_ev(learned, selected_position)
-    st.caption("EVがプラスなら open_auto = 1、EVが0以下なら open_auto = 0 としています。")
-    st.dataframe(
-        range_df.sort_values("ev", ascending=False)[["position", "hand", "ev", "open_auto", "category", "side_cards", "suit_pattern", "ace_suited_count"]],
-        use_container_width=True,
-        height=360,
-    )
-else:
-    range_df = pd.DataFrame()
-    st.info("このポジションのデータがないため、EVプラス判定はできません。")
+# EVプラス判定の一覧表示は削除。
+# R/F確認は「ハンド別 ポジションEV / R・F」に集約する。
+range_df = assign_open_by_positive_ev(learned, selected_position) if len(current) > 0 else pd.DataFrame()
 
 # カテゴリ集計
 st.subheader(f"カテゴリ集計: {selected_position}")
