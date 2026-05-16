@@ -280,8 +280,6 @@ def feature_row(hand: str):
         "is_aaxx": int(is_aaxx(cards)),
         "is_aaaa": int(is_aaaa(cards)),
         "side_cards": side_cards_for_aa(cards) if is_aaxx(cards) else "",
-        "side_cards_sort": rank_string_sort_value(side_cards_for_aa(cards)) if is_aaxx(cards) else 0,
-        "hand_sort": hand_sort_value(cards),
         "suit_pattern": sp,
         "ace_suited_count": ace_suited_count(cards),
         "pair_count": pair_count(cards),
@@ -486,6 +484,128 @@ with st.form("add_ev_form"):
                 f"同型ハンド {len(equivalent_hands)}件を自動追加"
             )
 
+st.subheader("EVをまとめて登録")
+st.caption("複数行を貼り付けて一括登録できます。形式は `position,hand,ev` または `hand,ev` です。`hand,ev` の場合は選択中のポジションとして登録します。")
+
+with st.form("bulk_add_ev_form"):
+    bulk_text = st.text_area(
+        "一括入力",
+        placeholder="例:
+UTG,AdAcTdTc,4.33
+UTG,AdAcQdQc,4.41
+HJ,AsAcKsKc,4.80
+
+または
+AdAcTdTc,4.33
+AdAcQdQc,4.41",
+        height=180,
+    )
+    bulk_submitted = st.form_submit_button("まとめて登録")
+
+    if bulk_submitted:
+        rows = st.session_state.manual_rows
+        added_count = 0
+        error_lines = []
+
+        for line_no, line in enumerate(bulk_text.splitlines(), start=1):
+            line = line.strip()
+            if not line:
+                continue
+
+            # カンマ区切り、タブ区切り、スペース区切りに対応
+            if "," in line:
+                parts = [p.strip() for p in line.split(",")]
+            elif "	" in line:
+                parts = [p.strip() for p in line.split("	")]
+            else:
+                parts = [p.strip() for p in line.split()]
+
+            if len(parts) == 3:
+                pos_bulk, hand_bulk, ev_bulk = parts
+                pos_bulk = normalize_position(pos_bulk)
+            elif len(parts) == 2:
+                pos_bulk = selected_position
+                hand_bulk, ev_bulk = parts
+            else:
+                error_lines.append(f"{line_no}行目: 形式が不正")
+                continue
+
+            if pos_bulk not in POSITIONS:
+                error_lines.append(f"{line_no}行目: positionが不正: {pos_bulk}")
+                continue
+
+            fr = feature_row(hand_bulk)
+            if fr is None:
+                error_lines.append(f"{line_no}行目: handが不正: {hand_bulk}")
+                continue
+
+            try:
+                ev_bulk = round(float(ev_bulk), 2)
+            except ValueError:
+                error_lines.append(f"{line_no}行目: evが不正: {ev_bulk}")
+                continue
+
+            # 同型ハンドを上書き削除してから、自動追加
+            rows = [
+                r for r in rows
+                if not (
+                    normalize_position(r.get("position", "UTG")) == pos_bulk
+                    and canonical_key(str(r.get("hand", ""))) == canonical_key(hand_bulk)
+                )
+            ]
+
+            equivalent_hands = generate_equivalent_hands(hand_bulk)
+            for h in equivalent_hands:
+                rows.append({"position": pos_bulk, "hand": h, "ev": ev_bulk})
+                added_count += 1
+
+        st.session_state.manual_rows = rows
+
+        if added_count > 0:
+            st.success(f"一括登録しました: {added_count}件")
+        if error_lines:
+            st.warning("一部登録できない行がありました。")
+            st.code("
+".join(error_lines), language="text")
+
+st.subheader("選択中ポジションへ連続登録")
+st.caption("GTO Wizardで現在見ているポジションに合わせて、hand と ev を連続で登録します。登録先は左側の『表示・予測するポジション』です。")
+
+with st.form("quick_add_current_position_form"):
+    q1, q2, q3 = st.columns([2, 1, 1])
+    quick_hand = q1.text_input("hand", placeholder="例: AsAcKsKc", key="quick_hand_current_position")
+    quick_ev_text = q2.text_input("ev", placeholder="例: 4.33", key="quick_ev_current_position")
+    quick_submitted = q3.form_submit_button(f"{selected_position}に登録")
+
+    if quick_submitted:
+        fr = feature_row(quick_hand)
+        if fr is None:
+            st.error("ハンド形式が不正です。例: AsAcKsKc")
+        else:
+            try:
+                ev_value = round(float(str(quick_ev_text).strip()), 2)
+                rows = st.session_state.manual_rows
+
+                rows = [
+                    r for r in rows
+                    if not (
+                        normalize_position(r.get("position", "UTG")) == selected_position
+                        and canonical_key(str(r.get("hand", ""))) == canonical_key(quick_hand)
+                    )
+                ]
+
+                equivalent_hands = generate_equivalent_hands(quick_hand)
+                for h in equivalent_hands:
+                    rows.append({"position": selected_position, "hand": h, "ev": ev_value})
+
+                st.session_state.manual_rows = rows
+                st.success(
+                    f"登録しました: {selected_position} {quick_hand.strip()} = {ev_value:.2f} / "
+                    f"同型ハンド {len(equivalent_hands)}件を自動追加"
+                )
+            except ValueError:
+                st.error("EV形式が不正です。例: 4.33")
+
 learned_raw = pd.DataFrame(st.session_state.manual_rows)
 
 if len(learned_raw) == 0:
@@ -647,11 +767,7 @@ if search:
     ]
 
 if len(view) > 0:
-    view = view.sort_values(
-    ["ev", "side_cards_sort", "hand_sort", "hand"],
-    ascending=[False, False, False, True],
-    na_position="last",
-)
+    view = view.sort_values("ev", ascending=False, na_position="last")
     st.dataframe(
         view[["position", "hand", "ev", "category", "side_cards", "suit_pattern", "ace_suited_count", "pair_count", "connectedness"]],
         use_container_width=True,
