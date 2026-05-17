@@ -5,11 +5,6 @@ from math import sqrt
 # =========================
 # PLO4 EV Memory / Predictor Tool
 # =========================
-# 目的:
-# 1. position, hand, ev を1つずつ手入力して覚えさせる
-# 2. 登録済みEVをCSVで保存・再アップロードできる
-# 3. 登録済みデータをもとに、同じポジション内で未入力ハンドのEVを近似予測する
-#
 # requirements.txt:
 # streamlit
 # pandas
@@ -34,12 +29,13 @@ RANK_VALUE = {
 SUITS = "cdhs"
 POSITIONS = ["UTG", "HJ", "CO", "BTN", "SB"]
 TOTAL_PLO4_COMBOS = 270725
+
 DEFAULT_OPEN_PCT = {
     "UTG": 18.1,
-    "HJ": 24.0,
-    "CO": 36.0,
-    "BTN": 60.0,
-    "SB": 45.0,
+    "HJ": 22.9,
+    "CO": 30.9,
+    "BTN": 47.6,
+    "SB": 30.3,
 }
 
 
@@ -50,7 +46,7 @@ def parse_hand(hand: str):
     hand = str(hand).strip()
     if len(hand) != 8:
         return []
-    cards = [hand[i:i+2] for i in range(0, 8, 2)]
+    cards = [hand[i:i + 2] for i in range(0, 8, 2)]
     valid = all(len(c) == 2 and c[0] in RANKS and c[1] in SUITS for c in cards)
     if not valid:
         return []
@@ -140,15 +136,14 @@ def category(cards):
 
 
 def rank_values_sorted(cards):
-    vals = sorted([RANK_VALUE[c[0]] for c in cards], reverse=True)
-    return vals
+    return sorted([RANK_VALUE[c[0]] for c in cards], reverse=True)
 
 
 def connectedness_score(cards):
     vals = sorted(set([RANK_VALUE[c[0]] for c in cards]))
     if len(vals) <= 1:
         return 0
-    gaps = [vals[i+1] - vals[i] for i in range(len(vals)-1)]
+    gaps = [vals[i + 1] - vals[i] for i in range(len(vals) - 1)]
     return sum(max(0, 5 - g) for g in gaps)
 
 
@@ -157,10 +152,7 @@ def high_card_score(cards):
 
 
 def rank_string_sort_value(rank_string: str):
-    """
-    AKQJT98765432順で文字列ランクを数値化する。
-    例: QQ > TT になるようにする。
-    """
+    """AKQJT98765432順で文字列ランクを数値化する。例: QQ > TT"""
     if not rank_string:
         return 0
     value = 0
@@ -170,10 +162,7 @@ def rank_string_sort_value(rank_string: str):
 
 
 def hand_sort_value(cards):
-    """
-    ハンド全体を A K Q J T 9 ... 2 の順でソートするための数値。
-    例: AAQQ > AATT になる。
-    """
+    """ハンド全体を A K Q J T 9 ... 2 の順でソートするための数値。"""
     vals = sorted([RANK_VALUE[c[0]] for c in cards], reverse=True)
     value = 0
     for v in vals:
@@ -184,14 +173,8 @@ def hand_sort_value(cards):
 def canonical_key_from_cards(cards):
     """
     スート名の違いを無視して、同じ構成のハンドを同じキーにする。
-
-    例:
-    AsAcKsKc と AhAcKhKc は同じ canonical_key になる。
-
-    強化版:
     実スート c/d/h/s を a/b/c/d に置き換える全パターンを試し、
     その中で一番小さい表現を採用する。
-    これにより、ペアや同ランクがあるハンドでも安定して同型判定できる。
     """
     from itertools import permutations
 
@@ -209,11 +192,7 @@ def canonical_key_from_cards(cards):
             suit = card[1]
             converted.append(rank + suit_map[suit])
 
-        # ランク降順、同ランクなら正規化スート順に並べる
-        converted = sorted(
-            converted,
-            key=lambda c: (-RANK_VALUE[c[0]], c[1])
-        )
+        converted = sorted(converted, key=lambda c: (-RANK_VALUE[c[0]], c[1]))
         possible_keys.append("".join(converted))
 
     return min(possible_keys)
@@ -227,7 +206,7 @@ def canonical_key(hand: str):
 
 
 def normalize_hand_order(cards):
-    """表示用にランク降順、同ランクはスート順で並べる"""
+    """表示用にランク降順、同ランクはスート順で並べる。"""
     ordered = sorted(cards, key=lambda c: (-RANK_VALUE[c[0]], c[1]))
     return "".join(ordered)
 
@@ -235,12 +214,7 @@ def normalize_hand_order(cards):
 def generate_equivalent_hands(hand: str):
     """
     入力ハンドとスート構造が同じハンドをすべて生成する。
-
-    例:
-    AsAcKsKc を登録したら、AhAcKhKc なども自動で登録対象にする。
-
-    注意:
-    これはランク構造とスート接続構造を保ったまま、c/d/h/sを入れ替えたもの。
+    ランク構造とスート接続構造を保ったまま、c/d/h/sを入れ替える。
     """
     from itertools import permutations
 
@@ -272,6 +246,7 @@ def feature_row(hand: str):
 
     sp = suit_pattern(cards)
     cat = category(cards)
+    side_cards = side_cards_for_aa(cards) if is_aaxx(cards) else ""
 
     return {
         "hand": hand.strip(),
@@ -279,7 +254,9 @@ def feature_row(hand: str):
         "category": cat,
         "is_aaxx": int(is_aaxx(cards)),
         "is_aaaa": int(is_aaaa(cards)),
-        "side_cards": side_cards_for_aa(cards) if is_aaxx(cards) else "",
+        "side_cards": side_cards,
+        "side_cards_sort": rank_string_sort_value(side_cards),
+        "hand_sort": hand_sort_value(cards),
         "suit_pattern": sp,
         "ace_suited_count": ace_suited_count(cards),
         "pair_count": pair_count(cards),
@@ -309,7 +286,6 @@ def normalize_position(pos):
         "UTG1": "HJ",
         "BU": "BTN",
         "BUTTON": "BTN",
-        "BB": "BB",
     }
     return aliases.get(pos, pos)
 
@@ -401,10 +377,6 @@ def predict_ev(target_hand: str, learned: pd.DataFrame, position: str, k: int = 
 
 
 def assign_open_by_positive_ev(df: pd.DataFrame, position: str) -> pd.DataFrame:
-    """
-    指定ポジションのEVがプラスならopen扱いにする。
-    EV <= 0 はfold扱い。
-    """
     df = df[df["position"] == position].copy()
     df["open_auto"] = (df["ev"] > 0).astype(int)
     return df
@@ -417,14 +389,14 @@ st.title("PLO4 EV Memory / Position EV Predictor")
 
 st.markdown(
     """
-EVを **ポジション別** に1つずつ登録して、登録済みデータから未入力ハンドのEVを近似します。  
+EVを **ポジション別** に登録して、登録済みデータから未入力ハンドのEVを近似します。  
 重要: この予測はGTOソルバーではなく、あなたが入力したEVデータに基づく近似です。
 
 ### 基本運用
-1. 最初に、前回保存した `plo4_ev_memory.csv` を左側から読み込む  
+1. 前回保存したCSVを左側から追加読み込みする  
 2. `position` を選び、新しい `hand` と `ev` を登録する  
 3. 最後に必ず `登録済みEVをCSVで保存` を押す  
-4. 次回は、その保存した `plo4_ev_memory.csv` をまた読み込む  
+4. 次回は、その保存したCSVをまた読み込む  
 
 保存しないで閉じると、その回に入力したEVは消えます。
 """
@@ -446,17 +418,13 @@ uploaded_files = st.sidebar.file_uploader(
 )
 
 if uploaded_files:
-    # 複数CSVを追加読み込みする。
-    # 同じファイルは画面更新のたびに再読み込みしない。
-    current_signatures = []
     added_total = 0
-
     rows = st.session_state.manual_rows
 
     for uploaded in uploaded_files:
         csv_signature = f"{uploaded.name}_{uploaded.size}"
-        current_signatures.append(csv_signature)
 
+        # 同じCSVを画面更新のたびに再読み込みしない
         if csv_signature in st.session_state.loaded_csv_signatures:
             continue
 
@@ -472,23 +440,27 @@ if uploaded_files:
             for _, item in loaded.iterrows():
                 pos = normalize_position(item["position"])
                 hand = str(item["hand"]).strip()
-                ev = round(float(item["ev"]), 2)
-                key = canonical_key(hand)
 
+                try:
+                    ev = round(float(item["ev"]), 2)
+                except ValueError:
+                    continue
+
+                key = canonical_key(hand)
                 if pos not in POSITIONS or key == "":
                     continue
 
                 # CSV読み込み時は position + hand が完全一致したものだけ上書きする。
-# canonical_keyで潰すと、同型スート違いハンドが1件に減ってしまう。
-rows = [
-    r for r in rows
-    if not (
-        normalize_position(r.get("position", "UTG")) == pos
-        and str(r.get("hand", "")).strip().lower() == hand.lower()
-    )
-]
+                # canonical_keyで潰すと、同型スート違いハンドが1件に減ってしまう。
+                rows = [
+                    r for r in rows
+                    if not (
+                        normalize_position(r.get("position", "UTG")) == pos
+                        and str(r.get("hand", "")).strip().lower() == hand.lower()
+                    )
+                ]
 
-rows.append({"position": pos, "hand": hand, "ev": ev})
+                rows.append({"position": pos, "hand": hand, "ev": ev})
                 added_total += 1
 
             st.session_state.loaded_csv_signatures.add(csv_signature)
@@ -516,7 +488,7 @@ with st.form("add_ev_form"):
             st.error("ハンド形式が不正です。例: AdAc8h3h")
         else:
             rows = st.session_state.manual_rows
-            # position + hand が同じなら上書き
+            # 登録時は同型ハンドをまとめて上書きする
             rows = [
                 r for r in rows
                 if not (
@@ -526,7 +498,7 @@ with st.form("add_ev_form"):
             ]
             equivalent_hands = generate_equivalent_hands(hand_input)
             for h in equivalent_hands:
-                rows.append({"position": pos_input, "hand": h, "ev": ev_input})
+                rows.append({"position": pos_input, "hand": h, "ev": round(float(ev_input), 2)})
             st.session_state.manual_rows = rows
             st.success(
                 f"登録しました: {pos_input} {hand_input.strip()} = {ev_input:.2f} / "
@@ -561,11 +533,10 @@ AdAcQdQc,4.41""",
             if not line:
                 continue
 
-            # カンマ区切り、タブ区切り、スペース区切りに対応
             if "," in line:
                 parts = [p.strip() for p in line.split(",")]
-            elif "	" in line:
-                parts = [p.strip() for p in line.split("	")]
+            elif "\t" in line:
+                parts = [p.strip() for p in line.split("\t")]
             else:
                 parts = [p.strip() for p in line.split()]
 
@@ -594,7 +565,7 @@ AdAcQdQc,4.41""",
                 error_lines.append(f"{line_no}行目: evが不正: {ev_bulk}")
                 continue
 
-            # 同型ハンドを上書き削除してから、自動追加
+            # 一括登録時も同型ハンドをまとめて上書きする
             rows = [
                 r for r in rows
                 if not (
@@ -785,6 +756,7 @@ with st.form("delete_ev_form"):
             st.error("ハンド形式が不正です。例: AdAc8h3h")
         else:
             before = len(st.session_state.manual_rows)
+            # 削除時は同型ハンドをまとめて消す
             st.session_state.manual_rows = [
                 r for r in st.session_state.manual_rows
                 if not (
@@ -815,16 +787,22 @@ if search:
     ]
 
 if len(view) > 0:
-    view = view.sort_values("ev", ascending=False, na_position="last")
+    view = view.sort_values(
+        ["ev", "side_cards_sort", "hand_sort", "hand"],
+        ascending=[False, False, False, True],
+        na_position="last",
+    )
     st.dataframe(
         view[["position", "hand", "ev", "category", "side_cards", "suit_pattern", "ace_suited_count", "pair_count", "connectedness"]],
         use_container_width=True,
         height=420,
+        column_config={
+            "ev": st.column_config.NumberColumn("EV", format="%.2f"),
+        },
     )
 else:
     st.info(f"{selected_position} の登録データがありません。")
 
-# EVプラス判定の一覧表示は削除。
 # R/F確認は「ハンド別 ポジションEV / R・F」に集約する。
 range_df = assign_open_by_positive_ev(learned, selected_position) if len(current) > 0 else pd.DataFrame()
 
@@ -836,7 +814,15 @@ if len(current) > 0:
         .agg(count=("hand", "count"), avg_ev=("ev", "mean"), max_ev=("ev", "max"), min_ev=("ev", "min"))
         .reset_index()
     )
-    st.dataframe(summary, use_container_width=True)
+    st.dataframe(
+        summary,
+        use_container_width=True,
+        column_config={
+            "avg_ev": st.column_config.NumberColumn("平均EV", format="%.2f"),
+            "max_ev": st.column_config.NumberColumn("最高EV", format="%.2f"),
+            "min_ev": st.column_config.NumberColumn("最低EV", format="%.2f"),
+        },
+    )
 
 # ダウンロード
 st.subheader("保存")
@@ -861,15 +847,7 @@ for pos in POSITIONS:
         mime="text/csv",
     )
 
-if len(range_df) > 0:
-    range_out = range_df[["position", "hand", "ev", "open_auto", "category", "side_cards", "suit_pattern", "ace_suited_count"]].sort_values("ev", ascending=False)
-    st.download_button(
-        f"{selected_position} open判定つきCSVを保存",
-        data=range_out.to_csv(index=False).encode("utf-8-sig"),
-        file_name=f"plo4_{selected_position.lower()}_range_output.csv",
-        mime="text/csv",
-    )
-
 if st.button("登録データを画面上からリセット"):
     st.session_state.manual_rows = []
+    st.session_state.loaded_csv_signatures = set()
     st.rerun()
