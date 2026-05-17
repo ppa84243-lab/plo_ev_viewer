@@ -478,16 +478,17 @@ if uploaded_files:
                 if pos not in POSITIONS or key == "":
                     continue
 
-                # position + 同型ハンドは上書き統合
-                rows = [
-                    r for r in rows
-                    if not (
-                        normalize_position(r.get("position", "UTG")) == pos
-                        and canonical_key(str(r.get("hand", ""))) == key
-                    )
-                ]
+                # CSV読み込み時は position + hand が完全一致したものだけ上書きする。
+# canonical_keyで潰すと、同型スート違いハンドが1件に減ってしまう。
+rows = [
+    r for r in rows
+    if not (
+        normalize_position(r.get("position", "UTG")) == pos
+        and str(r.get("hand", "")).strip().lower() == hand.lower()
+    )
+]
 
-                rows.append({"position": pos, "hand": hand, "ev": ev})
+rows.append({"position": pos, "hand": hand, "ev": ev})
                 added_total += 1
 
             st.session_state.loaded_csv_signatures.add(csv_signature)
